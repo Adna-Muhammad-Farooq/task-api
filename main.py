@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import sqlite3
+
 
 app = FastAPI(
     title="Task API",
@@ -8,13 +10,47 @@ app = FastAPI(
 )
 
 
-def error_response(message: str, status_code: int):
-    return JSONResponse(
-        status_code=status_code,
-        content={"error": message}
-    )
+# Database connection
+def get_db():
+    connection = sqlite3.connect("tasks.db")
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
+# Create database table and example tasks
+def init_db():
+    connection = get_db()
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            done BOOLEAN NOT NULL DEFAULT 0
+        )
+    """)
+
+    count = connection.execute(
+        "SELECT COUNT(*) FROM tasks"
+    ).fetchone()[0]
+
+    if count == 0:
+        connection.executemany(
+            "INSERT INTO tasks (title, done) VALUES (?, ?)",
+            [
+                ("Learn FastAPI", 0),
+                ("Build CRUD API", 0),
+                ("Connect SQLite database", 0)
+            ]
+        )
+
+    connection.commit()
+    connection.close()
+
+
+init_db()
+
+
+# Request models
 class TaskCreate(BaseModel):
     title: str | None = None
 
@@ -24,15 +60,15 @@ class TaskUpdate(BaseModel):
     done: bool | None = None
 
 
-tasks = [
-    {"id": 1, "title": "Learn FastAPI", "done": False},
-    {"id": 2, "title": "Build CRUD API", "done": False},
-    {"id": 3, "title": "Test API with Swagger", "done": False}
-]
+# Error response
+def error_response(message: str, status_code: int):
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": message}
+    )
 
 
-# Stage 1
-
+# Root
 @app.get("/", summary="Get API information")
 def root():
     return {
@@ -42,6 +78,7 @@ def root():
     }
 
 
+# Health
 @app.get("/health", summary="Check API health")
 def health():
     return {
@@ -49,28 +86,55 @@ def health():
     }
 
 
-# Stage 2 - READ
-
+# GET all tasks
 @app.get("/tasks", summary="Get all tasks")
 def get_tasks():
-    return tasks
+
+    connection = get_db()
+
+    rows = connection.execute(
+        "SELECT id, title, done FROM tasks ORDER BY id"
+    ).fetchall()
+
+    connection.close()
+
+    return [
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "done": bool(row["done"])
+        }
+        for row in rows
+    ]
 
 
+# GET one task
 @app.get("/tasks/{task_id}", summary="Get one task")
 def get_task(task_id: int):
 
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
+    connection = get_db()
 
-    return error_response(
-        f"Task {task_id} not found",
-        404
-    )
+    row = connection.execute(
+        "SELECT id, title, done FROM tasks WHERE id = ?",
+        (task_id,)
+    ).fetchone()
+
+    connection.close()
+
+    if row is None:
+        return error_response(
+            f"Task {task_id} not found",
+            404
+        )
+
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"])
+    }
 
 
-# Stage 3 - CREATE
-
+# POST create task
 @app.post(
     "/tasks",
     status_code=201,
@@ -84,24 +148,32 @@ def create_task(task: TaskCreate):
             400
         )
 
-    new_id = max(
-        [task["id"] for task in tasks],
-        default=0
-    ) + 1
+    connection = get_db()
 
-    new_task = {
-        "id": new_id,
-        "title": task.title,
-        "done": False
+    cursor = connection.execute(
+        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        (task.title, 0)
+    )
+
+    connection.commit()
+
+    task_id = cursor.lastrowid
+
+    row = connection.execute(
+        "SELECT id, title, done FROM tasks WHERE id = ?",
+        (task_id,)
+    ).fetchone()
+
+    connection.close()
+
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"])
     }
 
-    tasks.append(new_task)
 
-    return new_task
-
-
-# Stage 4 - UPDATE
-
+# PUT update task
 @app.put(
     "/tasks/{task_id}",
     summary="Update a task"
@@ -111,44 +183,68 @@ def update_task(
     task_update: TaskUpdate
 ):
 
-    for task in tasks:
+    if (
+        task_update.title is None
+        and task_update.done is None
+    ):
+        return error_response(
+            "Request body cannot be empty",
+            400
+        )
 
-        if task["id"] == task_id:
+    if (
+        task_update.title is not None
+        and not task_update.title.strip()
+    ):
+        return error_response(
+            "Title cannot be empty",
+            400
+        )
 
-            if (
-                task_update.title is None
-                and task_update.done is None
-            ):
-                return error_response(
-                    "Request body cannot be empty",
-                    400
-                )
+    connection = get_db()
 
-            if (
-                task_update.title is not None
-                and not task_update.title.strip()
-            ):
-                return error_response(
-                    "Title cannot be empty",
-                    400
-                )
+    existing = connection.execute(
+        "SELECT id FROM tasks WHERE id = ?",
+        (task_id,)
+    ).fetchone()
 
-            if task_update.title is not None:
-                task["title"] = task_update.title
+    if existing is None:
+        connection.close()
 
-            if task_update.done is not None:
-                task["done"] = task_update.done
+        return error_response(
+            f"Task {task_id} not found",
+            404
+        )
 
-            return task
+    if task_update.title is not None:
+        connection.execute(
+            "UPDATE tasks SET title = ? WHERE id = ?",
+            (task_update.title, task_id)
+        )
 
-    return error_response(
-        f"Task {task_id} not found",
-        404
-    )
+    if task_update.done is not None:
+        connection.execute(
+            "UPDATE tasks SET done = ? WHERE id = ?",
+            (int(task_update.done), task_id)
+        )
+
+    connection.commit()
+
+    row = connection.execute(
+        "SELECT id, title, done FROM tasks WHERE id = ?",
+        (task_id,)
+    ).fetchone()
+
+    connection.close()
+
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"])
+    }
 
 
-# Stage 4 - DELETE
-
+# DELETE task
 @app.delete(
     "/tasks/{task_id}",
     status_code=204,
@@ -156,15 +252,27 @@ def update_task(
 )
 def delete_task(task_id: int):
 
-    for index, task in enumerate(tasks):
+    connection = get_db()
 
-        if task["id"] == task_id:
+    existing = connection.execute(
+        "SELECT id FROM tasks WHERE id = ?",
+        (task_id,)
+    ).fetchone()
 
-            tasks.pop(index)
+    if existing is None:
+        connection.close()
 
-            return Response(status_code=204)
+        return error_response(
+            f"Task {task_id} not found",
+            404
+        )
 
-    return error_response(
-        f"Task {task_id} not found",
-        404
+    connection.execute(
+        "DELETE FROM tasks WHERE id = ?",
+        (task_id,)
     )
+
+    connection.commit()
+    connection.close()
+
+    return Response(status_code=204)
