@@ -1,103 +1,114 @@
-# Task API
+# Task API — SQLite Database
 
-This is a simple Task API that I created using Python and FastAPI.
+A simple CRUD API built with **FastAPI** and **SQLite**.
 
-The purpose of this project is to practice building a REST API and understand how CRUD operations work.
+This project is an upgraded version of the previous in-memory Task API. Instead of storing tasks in a Python list, tasks are now stored permanently in a SQLite database.
 
-## What this API can do
+## Why SQLite?
 
-With this API, we can:
+SQLite was chosen because it is lightweight, easy to use, requires no separate database server, and stores the complete database in a single file.
 
-* Create a new task
-* See all tasks
-* See one task by its ID
-* Update a task
-* Delete a task
-* Check if the API is working
-* Test the API using Swagger UI
+## Database
 
-## Technologies I used
+The database file is:
+
+```text
+tasks.db
+```
+
+It is automatically created when the application starts.
+
+The `tasks` table contains:
+
+| Column | Type    | Description            |
+| ------ | ------- | ---------------------- |
+| id     | INTEGER | Primary key            |
+| title  | TEXT    | Task title             |
+| done   | BOOLEAN | Task completion status |
+
+If the table is empty, three example tasks are automatically inserted.
+
+## How to Run
+
+Create and activate a virtual environment, install the dependencies, and start the server:
+
+```powershell
+python -m uvicorn main:app --reload
+```
+
+The API will be available at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## API Endpoints
+
+| Method | Endpoint      | Description         |
+| ------ | ------------- | ------------------- |
+| GET    | `/`           | Get API information |
+| GET    | `/health`     | Check API health    |
+| GET    | `/tasks`      | Get all tasks       |
+| GET    | `/tasks/{id}` | Get one task        |
+| POST   | `/tasks`      | Create a task       |
+| PUT    | `/tasks/{id}` | Update a task       |
+| DELETE | `/tasks/{id}` | Delete a task       |
+
+## SQLite SQL Query
+
+One of the SQL queries executed during this assignment was:
+
+```sql
+SELECT * FROM tasks WHERE done = 1;
+```
+
+This query returns all completed tasks.
+
+Other queries tested:
+
+```sql
+SELECT * FROM tasks;
+```
+
+```sql
+SELECT COUNT(*) FROM tasks;
+```
+
+```sql
+UPDATE tasks SET done = 1;
+```
+
+```sql
+DELETE FROM tasks WHERE done = 1;
+```
+
+## Screenshots
+
+### Swagger UI
+
+![Swagger UI](swagger.png)
+
+### SQLite Database
+
+![SQLite Database](database.png)
+
+## Persistence
+
+Tasks are stored in `tasks.db`, so data remains available after the FastAPI server is stopped and restarted.
+
+The database and table are automatically created if they do not already exist.
+
+## Technologies
 
 * Python
 * FastAPI
 * Uvicorn
+* SQLite
+* SQL
 * Pydantic
-
-## How to run the project
-
-First, install the required packages:
-
-```bash
-pip install fastapi uvicorn
-```
-
-Then start the server:
-
-```bash
-python -m uvicorn main:app --reload
-```
-
-After starting the server, open:
-
-`http://127.0.0.1:8000`
-
-To test the API using Swagger:
-
-`http://127.0.0.1:8000/docs`
-
-## API Endpoints
-
-| Method | Endpoint      | What it does                          |
-| ------ | ------------- | ------------------------------------- |
-| GET    | `/`           | Shows basic information about the API |
-| GET    | `/health`     | Checks if the API is working          |
-| GET    | `/tasks`      | Shows all tasks                       |
-| GET    | `/tasks/{id}` | Shows one task                        |
-| POST   | `/tasks`      | Creates a new task                    |
-| PUT    | `/tasks/{id}` | Updates a task                        |
-| DELETE | `/tasks/{id}` | Deletes a task                        |
-
-## Example Task
-
-```json
-{
-  "id": 1,
-  "title": "Learn FastAPI",
-  "done": false
-}
-```
-
-## Testing
-
-I tested the API using the Swagger UI available at `/docs`.
-
-I tested the main CRUD operations:
-
-* Creating a task
-* Getting tasks
-* Updating a task
-* Deleting a task
-* Testing invalid task IDs
-
-## Storage
-
-For this assignment, I used an in-memory Python list to store the tasks.
-
-No database is used in this project.
-
-## Curl Test
-
-Command:
-
-curl -i http://localhost:8000/health
-
-Output:
-
-HTTP/1.1 200 OK
-content-type: application/json
-
-{"status":"ok"}
-
-## Swagger UI
-
-![Swagger UI](swagger.png)
