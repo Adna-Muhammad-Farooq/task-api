@@ -2,7 +2,10 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI()
+app = FastAPI(
+    title="Task API",
+    version="1.0"
+)
 
 
 def error_response(message: str, status_code: int):
@@ -28,7 +31,9 @@ tasks = [
 ]
 
 
-@app.get("/")
+# Stage 1
+
+@app.get("/", summary="Get API information")
 def root():
     return {
         "name": "Task API",
@@ -37,19 +42,21 @@ def root():
     }
 
 
-@app.get("/health")
+@app.get("/health", summary="Check API health")
 def health():
     return {
         "status": "ok"
     }
 
 
-@app.get("/tasks")
+# Stage 2 - READ
+
+@app.get("/tasks", summary="Get all tasks")
 def get_tasks():
     return tasks
 
 
-@app.get("/tasks/{task_id}")
+@app.get("/tasks/{task_id}", summary="Get one task")
 def get_task(task_id: int):
 
     for task in tasks:
@@ -62,7 +69,13 @@ def get_task(task_id: int):
     )
 
 
-@app.post("/tasks", status_code=201)
+# Stage 3 - CREATE
+
+@app.post(
+    "/tasks",
+    status_code=201,
+    summary="Create a new task"
+)
 def create_task(task: TaskCreate):
 
     if not task.title or not task.title.strip():
@@ -87,7 +100,12 @@ def create_task(task: TaskCreate):
     return new_task
 
 
-@app.put("/tasks/{task_id}")
+# Stage 4 - UPDATE
+
+@app.put(
+    "/tasks/{task_id}",
+    summary="Update a task"
+)
 def update_task(
     task_id: int,
     task_update: TaskUpdate
@@ -129,7 +147,13 @@ def update_task(
     )
 
 
-@app.delete("/tasks/{task_id}", status_code=204)
+# Stage 4 - DELETE
+
+@app.delete(
+    "/tasks/{task_id}",
+    status_code=204,
+    summary="Delete a task"
+)
 def delete_task(task_id: int):
 
     for index, task in enumerate(tasks):
