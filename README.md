@@ -84,3 +84,20 @@ I tested the main CRUD operations:
 For this assignment, I used an in-memory Python list to store the tasks.
 
 No database is used in this project.
+
+## Curl Test
+
+Command:
+
+curl -i http://localhost:8000/health
+
+Output:
+
+HTTP/1.1 200 OK
+content-type: application/json
+
+{"status":"ok"}
+
+## Swagger UI
+
+![Swagger UI](swagger.png)
