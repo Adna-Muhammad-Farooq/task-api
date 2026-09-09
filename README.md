@@ -112,3 +112,7 @@ The database and table are automatically created if they do not already exist.
 * SQLite
 * SQL
 * Pydantic
+
+GitHub: [Adna-Muhammad-Farooq](https://github.com/Adna-Muhammad-Farooq)
+**Email:** [shinwariadna@gmail.com](mailto:shinwariadna@gmail.com)
+* Email: [adnamuhammadfarooq27@gmail.com](mailto:adnamuhammadfarooq27@gmail.com)
