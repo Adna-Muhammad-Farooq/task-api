@@ -1,3 +1,6 @@
 venv/
 __pycache__/
 *.pyc
+.env
+a2-backup/
+tasks.db
