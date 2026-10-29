@@ -4,3 +4,4 @@ uvicorn[standard]
 psycopg[binary]
 openai
 python-dotenv
+httpx
