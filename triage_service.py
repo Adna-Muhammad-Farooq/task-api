@@ -6,6 +6,9 @@ import random
 import re
 import time
 
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+
 from openai import (
     APIStatusError,
     APITimeoutError,
@@ -20,7 +23,11 @@ from triage_client import (
     MODEL_NAME,
     PROMPT_VERSION,
 )
-from triage_models import TriageCategory, TriageResult, TriageUrgency
+from triage_models import (
+    TriageCategory,
+    TriageResult,
+    TriageUrgency,
+)
 
 
 logger = logging.getLogger("triage")
@@ -28,25 +35,34 @@ MAX_ATTEMPTS = 3
 
 
 def fallback_result() -> TriageResult:
-    """Return a safe, deterministic result without calling the AI."""
+    """Return a safe result without calling the AI."""
     return TriageResult(
         category=TriageCategory.OTHER,
         urgency=TriageUrgency.NORMAL,
         confidence=0.0,
-        reason="Automatic classification is unavailable; manual review is needed.",
+        reason=(
+            "Automatic classification is unavailable; "
+            "manual review is needed."
+        ),
     )
 
 
 def parse_result(raw_text: str) -> TriageResult:
-    """Extract JSON and validate every output field."""
+    """Extract JSON and validate all output fields."""
     text = raw_text.strip()
 
-    # Allow a model to wrap JSON in Markdown code fences.
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    # Remove Markdown code fences if present.
+    text = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     text = re.sub(r"\s*```$", "", text)
 
-    # If extra text surrounds the object, extract the JSON object.
+    # Extract the JSON object.
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+
     if not match:
         raise ValueError("No JSON object found in model output")
 
@@ -59,6 +75,7 @@ def call_model(
     repair_count: int,
 ) -> str:
     """Retry only timeouts, HTTP 429, and HTTP 5xx responses."""
+
     for attempt in range(MAX_ATTEMPTS):
         started = time.perf_counter()
 
@@ -74,6 +91,7 @@ def call_model(
             )
 
             usage = response.usage
+
             logger.info(
                 json.dumps({
                     "event": "llm_usage",
@@ -91,18 +109,31 @@ def call_model(
             )
 
             content = response.choices[0].message.content
+
             if not content:
                 raise ValueError("Model returned empty content")
 
             return content
 
-        except (APITimeoutError, RateLimitError, APIStatusError) as exc:
+        except (
+            APITimeoutError,
+            RateLimitError,
+            APIStatusError,
+        ) as exc:
+
             retryable = (
-                isinstance(exc, (APITimeoutError, RateLimitError))
+                isinstance(
+                    exc,
+                    (APITimeoutError, RateLimitError),
+                )
                 or (
                     isinstance(exc, APIStatusError)
                     and exc.status_code >= 500
                 )
+            )
+
+            duration_ms = round(
+                (time.perf_counter() - started) * 1000
             )
 
             logger.warning(
@@ -110,74 +141,150 @@ def call_model(
                     "event": "llm_request_error",
                     "prompt_version": PROMPT_VERSION,
                     "model": MODEL_NAME,
-                    "status_code": getattr(exc, "status_code", None),
+                    "status_code": getattr(
+                        exc,
+                        "status_code",
+                        None,
+                    ),
                     "attempt": attempt + 1,
+                    "duration_ms": duration_ms,
                     "repair_count": repair_count,
                 })
             )
 
+            # Do not retry 400, 401, or 403 errors.
             if not retryable or attempt == MAX_ATTEMPTS - 1:
                 raise
 
-            # Respect Retry-After when available; otherwise use
-            # exponential backoff with jitter.
+            # Read Retry-After header if available.
             retry_after = None
-            response_obj = getattr(exc, "response", None)
+
+            response_obj = getattr(
+                exc,
+                "response",
+                None,
+            )
+
             if response_obj is not None:
-                retry_after = response_obj.headers.get("Retry-After")
+                retry_after = response_obj.headers.get(
+                    "Retry-After"
+                )
 
-            try:
-                delay = float(retry_after) if retry_after else None
-            except (TypeError, ValueError):
-                delay = None
+            delay = None
 
+            # Retry-After may be seconds or an HTTP date.
+            if retry_after:
+                try:
+                    delay = max(
+                        0.0,
+                        float(retry_after),
+                    )
+
+                except (TypeError, ValueError):
+                    try:
+                        retry_date = parsedate_to_datetime(
+                            retry_after
+                        )
+
+                        if retry_date.tzinfo is None:
+                            retry_date = retry_date.replace(
+                                tzinfo=timezone.utc
+                            )
+
+                        delay = max(
+                            0.0,
+                            (
+                                retry_date
+                                - datetime.now(timezone.utc)
+                            ).total_seconds(),
+                        )
+
+                    except (
+                        TypeError,
+                        ValueError,
+                        OverflowError,
+                    ):
+                        delay = None
+
+            # Use exponential backoff with jitter.
             if delay is None:
-                delay = min(2 ** attempt, 8) + random.uniform(0, 0.5)
+                delay = (
+                    min(2 ** attempt, 8)
+                    + random.uniform(0, 0.5)
+                )
 
+            # Maximum waiting time between attempts.
             time.sleep(min(delay, 30))
 
-    raise RuntimeError("Model request attempts exhausted")
+    raise RuntimeError(
+        "Model request attempts exhausted"
+    )
 
 
 def classify_message(message_text: str) -> TriageResult:
-    """Classify a message, validate the output, and repair once."""
-    # Assignment-required local stub: no network request.
+    """Classify a message, validate output, and repair once."""
+
+    # Local stub mode: no OpenRouter request.
     if os.getenv("LLM_STUB", "0") == "1":
         return TriageResult(
             category=TriageCategory.OTHER,
             urgency=TriageUrgency.NORMAL,
             confidence=0.5,
-            reason="Stub mode is enabled; this is a test response.",
+            reason=(
+                "Stub mode is enabled; "
+                "this is a test response."
+            ),
         )
 
-    # Assignment kill switch: no network request.
-    if os.getenv("LLM_ENABLED", "true").lower() != "true":
+    # Kill switch: disable AI requests.
+    if os.getenv(
+        "LLM_ENABLED",
+        "true",
+    ).lower() != "true":
         return fallback_result()
 
     client = get_triage_client()
     system_prompt = load_triage_prompt()
 
-    # Keep untrusted message content separate from system instructions.
+    # Keep user input separate from system instructions.
     user_message = json.dumps(
         {"text": message_text},
         ensure_ascii=False,
     )
 
     messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
+        {
+            "role": "system",
+            "content": system_prompt,
+        },
+        {
+            "role": "user",
+            "content": user_message,
+        },
     ]
 
     repair_count = 0
 
+    # One original response and one repair attempt.
     for validation_attempt in range(2):
-        raw_text = call_model(client, messages, repair_count)
+
+        raw_text = call_model(
+            client,
+            messages,
+            repair_count,
+        )
 
         try:
             result = parse_result(raw_text)
             return result
 
-        except (ValidationError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            ValidationError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+
+            # If the repair also fails, quarantine the output.
             if validation_attempt == 1:
                 logger.error(
                     json.dumps({
@@ -189,18 +296,26 @@ def classify_message(message_text: str) -> TriageResult:
                         "raw_output": raw_text[:1000],
                     })
                 )
+
                 raise
 
+            # Ask the AI to correct its invalid response.
             repair_count = 1
+
             messages.extend([
-                {"role": "assistant", "content": raw_text},
+                {
+                    "role": "assistant",
+                    "content": raw_text,
+                },
                 {
                     "role": "user",
                     "content": (
-                        "Your previous response failed JSON/schema "
-                        "validation. Correct it using the original "
-                        "system instructions. Return only one valid "
-                        "JSON object with exactly these fields: "
+                        "Your previous response failed "
+                        "JSON/schema validation. "
+                        "Correct it using the original "
+                        "system instructions. "
+                        "Return only one valid JSON object "
+                        "with exactly these fields: "
                         "category, urgency, confidence, reason. "
                         "Validation error: "
                         f"{str(exc)[:500]}"
