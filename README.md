@@ -1,19 +1,32 @@
-# Task API — FastAPI, PostgreSQL & Docker
+# Task API — FastAPI, PostgreSQL, Docker & AI Triage
 
-A RESTful CRUD API built with **FastAPI** and **PostgreSQL**, containerized using Docker and Docker Compose.
+A RESTful API built with **FastAPI**, **PostgreSQL**, and **Docker**, with an AI-powered support message classification feature using **OpenRouter**.
 
-This project extends the original Task API from Assignment 2. It replaces SQLite storage with PostgreSQL and introduces separate repository and service layers to organize database operations and business logic.
+This project started as a task management API and was improved through different Backend AI Engineering assignments.
+
+The application supports task CRUD operations, PostgreSQL database storage, Docker deployment, and AI-powered customer support message classification.
 
 ## Features
 
+### Task Management
 - Create, retrieve, update, and delete tasks.
-- PostgreSQL database running in Docker.
-- Persistent database volume.
-- Environment-based database configuration.
-- Database table initialization using an SQL file.
-- Separate repository and service layers.
-- Interactive API documentation through Swagger UI.
-- Start the application and database together using Docker Compose.
+- Store task data in PostgreSQL.
+- Use Docker Compose to run the application and database.
+- Preserve database records using a Docker volume.
+- Organize database operations using repository and service layers.
+- Access interactive API documentation through Swagger UI.
+
+### AI Support Message Triage
+- Classify customer support messages using an LLM through OpenRouter.
+- Identify message categories: `billing`, `bug`, `feature`, or `other`.
+- Identify urgency levels: `low`, `normal`, or `high`.
+- Return a confidence score and short explanation.
+- Validate AI responses using Pydantic.
+- Attempt to repair invalid AI responses once.
+- Retry requests after temporary AI service errors.
+- Support environment-based AI configuration and a kill switch.
+- Record AI request information and errors for debugging.
+- Evaluate AI classification using a small test dataset.
 
 ## Project Structure
 
@@ -22,11 +35,22 @@ task-api/
 ├── main.py
 ├── service.py
 ├── repository.py
+├── triage_models.py
+├── triage_client.py
+├── triage_service.py
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
 ├── .gitignore
+├── JOB-CARD.md
+├── prompts/
+│   └── triage_v1.txt
+├── evals/
+│   ├── cases.json
+│   ├── run_evals.py
+│   ├── test_repair.py
+│   └── test_retry.py
 ├── sql/
 │   └── init.sql
 └── README.md
@@ -34,15 +58,22 @@ task-api/
 
 ## Architecture
 
-The application separates HTTP handling, service operations, and database access.
+The project separates API handling, business logic, database operations, and AI processing.
 
-- **main.py:** Defines FastAPI routes, validates request data, and returns HTTP responses.
-- **service.py:** Coordinates task operations between the routes and repository.
-- **repository.py:** Executes PostgreSQL queries for creating, retrieving, updating, and deleting tasks.
+- **main.py:** Defines FastAPI routes and returns HTTP responses.
+- **service.py:** Handles task management business logic.
+- **repository.py:** Executes PostgreSQL database queries.
+- **triage_models.py:** Defines and validates AI triage data.
+- **triage_client.py:** Configures the AI client.
+- **triage_service.py:** Handles AI classification, validation, repair, retries, and logging.
+- **prompts/triage_v1.txt:** Stores the versioned AI classification prompt.
+- **evals/:** Contains evaluation data and automated AI tests.
 - **sql/init.sql:** Defines the PostgreSQL tasks table.
-- **docker-compose.yml:** Starts the API and PostgreSQL containers together.
+- **docker-compose.yml:** Configures the application and PostgreSQL containers.
 
-The original A2 implementation accessed SQLite directly from its route handlers. For A3, the code was refactored to introduce repository and service layers while preserving the existing endpoint URLs and response behavior.
+The original task management API used SQLite. It was later improved to use PostgreSQL with separate repository and service layers.
+
+The AI triage feature was added without removing the existing task management functionality.
 
 ## Technologies
 
@@ -52,59 +83,118 @@ The original A2 implementation accessed SQLite directly from its route handlers.
 - PostgreSQL
 - Psycopg
 - SQL
+- SQLAlchemy (if used in other project modules)
 - Docker
 - Docker Compose
 - Pydantic
+- OpenRouter API
+- OpenAI Python SDK
+- HTTPX
+- Git and GitHub
 
 ## Prerequisites
 
-Install Docker Desktop and ensure its Docker engine is running.
+Before running the project, install:
+
+- Python
+- Docker Desktop
+- Git
+
+For AI classification, you also need an OpenRouter API key.
 
 ## Environment Configuration
 
-Create a local `.env` file from the example:
+Create a local `.env` file using the example:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Update `.env` with your local database credentials. The example file uses placeholder credentials and should not contain real secrets.
+Update the local `.env` file with your database configuration and OpenRouter API key.
 
-The application reads its database connection string from the `DATABASE_URL` environment variable.
+Example AI configuration:
 
-The `.env` file is excluded from Git through `.gitignore`. Never commit real database credentials to GitHub.
+```env
+OPENROUTER_API_KEY=your_api_key_here
+LLM_ENABLED=true
+LLM_STUB=0
+```
 
-## Run the Application
+Use the exact environment variable names supported by your local application.
 
-Build the application image and start the complete stack:
+The `.env` file must not be uploaded to GitHub because it contains private credentials.
+
+The `.env.example` file should contain placeholder values only.
+
+## Installation
+
+Open the project folder in VS Code.
+
+Create a Python virtual environment:
+
+```powershell
+python -m venv venv
+```
+
+Activate it in PowerShell:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Install the required packages:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+## Run the Application with Docker
+
+Make sure Docker Desktop is running.
+
+Build and start the application and PostgreSQL:
 
 ```powershell
 docker compose up --build -d
 ```
 
-Check the container status:
+Check container status:
 
 ```powershell
 docker compose ps
 ```
 
-View application logs if needed:
+View application logs:
 
 ```powershell
 docker compose logs app
 ```
 
-The API runs at:
+The API is available at:
 
 http://localhost:8000
 
-Swagger UI is available at:
+Swagger UI:
 
 http://localhost:8000/docs
 
-The health endpoint is:
+Health endpoint:
 
 http://localhost:8000/health
+
+## Run the API Locally
+
+Make sure the required environment variables are configured and PostgreSQL is accessible.
+
+Start FastAPI:
+
+```powershell
+uvicorn main:app --reload
+```
+
+Open Swagger UI:
+
+http://127.0.0.1:8000/docs
 
 ## API Endpoints
 
@@ -117,22 +207,25 @@ http://localhost:8000/health
 | POST | `/tasks` | Create a task |
 | PUT | `/tasks/{task_id}` | Update a task |
 | DELETE | `/tasks/{task_id}` | Delete a task |
+| POST | `/triage` | Classify a customer support message using AI |
 
-### Example: Create a Task
+## Task Management Example
 
-Request:
+Send a POST request to `/tasks` with:
 
 ```json
 {
-  "title": "Complete Assignment 3"
+  "title": "Complete Backend AI Engineering Assignment"
 }
 ```
 
-Send this request to `POST /tasks`. A successful creation returns status `201 Created` and the created task.
+A successful request creates a task and returns HTTP `201 Created`.
 
 ## Database
 
-PostgreSQL runs in its own Docker container. The `tasks` table is initialized using `sql/init.sql`.
+PostgreSQL runs in a separate Docker container.
+
+The `tasks` table is initialized using `sql/init.sql`.
 
 | Column | Type | Description |
 |---|---|---|
@@ -140,13 +233,15 @@ PostgreSQL runs in its own Docker container. The `tasks` table is initialized us
 | `title` | TEXT | Task title |
 | `done` | BOOLEAN | Task completion status |
 
-The Compose configuration uses a named volume called `postgres_data` to preserve database files across container restarts and recreation.
+The application uses a named Docker volume called `postgres_data` to preserve database files.
 
-The database is exposed on host port `5433`, while the application connects to PostgreSQL internally on port `5432`.
+PostgreSQL is exposed on host port `5433`, while the application communicates with PostgreSQL internally using port `5432`.
 
-## Persistence Test
+## Database Persistence Test
 
-Persistence was tested by creating a task through the API:
+Database persistence was tested by creating a task through the API.
+
+Example:
 
 ```json
 {
@@ -154,21 +249,204 @@ Persistence was tested by creating a task through the API:
 }
 ```
 
-The API returned `201 Created` with the task's ID and data.
+The API returned HTTP `201 Created`.
 
-Next, both containers were restarted using:
+Both containers were then restarted:
 
 ```powershell
 docker compose restart
 ```
 
-After restarting, the `/tasks` endpoint was checked again. The previously created task was still present, confirming that the PostgreSQL data survived the restart.
+After restarting, the task was still available through `/tasks`.
 
-The named database volume is essential to this persistence behavior. Do not use `docker compose down -v` when you want to preserve the database volume.
+This confirmed that PostgreSQL data survived the container restart.
+
+To preserve database records, do not remove the named volume.
+
+## AI Support Message Triage
+
+The `/triage` endpoint uses an LLM through OpenRouter to classify customer support messages.
+
+The endpoint returns four main fields:
+
+- **Category:** Type of customer issue.
+- **Urgency:** Priority of the issue.
+- **Confidence:** AI confidence score.
+- **Reason:** Short explanation of the classification.
+
+### Example Request
+
+Send a POST request to `/triage`:
+
+```json
+{
+  "text": "I was charged twice for my subscription."
+}
+```
+
+### Example Response
+
+An example of the expected response structure:
+
+```json
+{
+  "category": "billing",
+  "urgency": "normal",
+  "confidence": 0.9,
+  "reason": "The customer reports a duplicate payment."
+}
+```
+
+The actual response may vary depending on the AI model.
+
+## AI Prompt
+
+The classification instructions are stored in:
+
+```text
+prompts/triage_v1.txt
+```
+
+The prompt contains instructions and examples to help the model classify messages.
+
+The prompt version is:
+
+`triage_v1`
+
+Keeping the prompt in a separate file makes it easier to update and evaluate.
+
+## AI Response Validation
+
+The application uses Pydantic to validate AI output.
+
+It checks that the model returns the required fields with valid values.
+
+If the model returns an invalid response, the application makes one repair attempt.
+
+If the response remains invalid, the application rejects it instead of returning incorrect data.
+
+The API returns HTTP `422` when AI output cannot be validated after the repair attempt.
+
+## AI Retry Handling
+
+The application includes retry handling for temporary AI service problems.
+
+For example, if the AI service returns HTTP `503`, the application can retry the request.
+
+The retry logic includes waiting between attempts.
+
+This helps the API handle temporary service errors more reliably.
+
+## AI Error Handling and Logging
+
+The application records information about AI requests and failures, including relevant details such as:
+
+- Prompt version
+- Model route
+- Request duration
+- Retry attempt
+- Repair count
+- Error information
+
+The API does not expose raw invalid AI output to the client when validation fails.
+
+Production logs should be protected because AI output may contain sensitive user information.
+
+## AI Evaluation
+
+The project includes eight test cases in:
+
+```text
+evals/cases.json
+```
+
+These cases check whether the AI correctly predicts message categories and urgency levels.
+
+### Latest Evaluation Results
+
+**Evaluation date:** October 29, 2026
+
+**Prompt version:** `triage_v1`
+
+**Model route:** `openrouter/free`
+
+**Total test cases:** 8
+
+| Metric | Correct | Accuracy |
+|---|---|---|
+| Category classification | 8/8 | 100% |
+| Urgency classification | 4/8 | 50% |
+
+The AI correctly identified all eight message categories.
+
+However, it made four mistakes in urgency classification:
+
+- **Case 2:** Expected high, but returned normal.
+- **Case 5:** Expected low, but returned normal.
+- **Case 6:** Expected low, but returned normal.
+- **Case 8:** Expected normal, but returned low.
+
+An earlier evaluation achieved 75% urgency accuracy, while the latest evaluation achieved 50%.
+
+The results can vary because the application uses a live AI model.
+
+These results show that category classification worked well on the small test dataset, but urgency classification still needs improvement.
+
+Eight test cases are not enough to measure real-world performance reliably.
+
+### Run the Evaluation
+
+```powershell
+python evals/run_evals.py
+```
+
+## Automated AI Tests
+
+The project includes automated tests for AI response validation and error handling.
+
+### 1. AI Repair and Validation Test
+
+Run:
+
+```powershell
+python evals/test_repair.py
+```
+
+This test verifies:
+
+- Invalid AI responses trigger a repair attempt.
+- Valid repaired responses are accepted.
+- Two invalid responses are rejected.
+- The API returns HTTP `422` when AI output remains invalid.
+- Raw invalid AI output is not included in the HTTP response.
+
+**Test result:** Passed on October 29, 2026.
+
+### 2. AI Retry Test
+
+Run:
+
+```powershell
+python evals/test_retry.py
+```
+
+This test simulates a temporary HTTP `503` server error.
+
+It verifies that the application retries and processes a successful response afterward.
+
+Observed test results:
+
+```text
+Model calls: 2
+Retry waits: 1
+RETRY TEST PASSED
+```
+
+**Test result:** Passed on October 29, 2026.
 
 ## Useful Database Commands
 
-List the tasks table:
+List database tables:
 
 ```powershell
 docker compose exec db psql -U taskuser -d taskdb -c "\dt"
@@ -182,59 +460,44 @@ docker compose exec db psql -U taskuser -d taskdb -c "SELECT id, title, done FRO
 
 ## Stop the Application
 
-Stop the containers without deleting the persistent database volume:
+Stop the containers without deleting the database volume:
 
 ```powershell
 docker compose down
 ```
 
-Start the stack again:
+Start them again:
 
 ```powershell
 docker compose up -d
 ```
 
+Avoid using `docker compose down -v` if you want to preserve PostgreSQL data.
+
 ## Security
 
-- Keep `.env` out of version control.
-- Commit `.env.example` with placeholder credentials only.
-- Use your own credentials when setting up a local copy of the project.
-- Never publish database passwords or other secrets in screenshots, logs, or source
+- Never commit `.env` or real API keys to GitHub.
+- Use `.env.example` with placeholder credentials only.
+- Keep database passwords private.
+- Avoid publishing secrets in screenshots, logs, or source code.
+- Validate AI output before returning it to users.
+- Handle temporary AI service errors safely.
+- Protect application logs from unauthorized access.
 
+## Project Summary
 
-## AI Support Message Triage
+This project demonstrates how a basic FastAPI CRUD application can be extended with database persistence, Docker deployment, and LLM integration.
 
-This project includes an AI-powered support message classification feature using FastAPI and OpenRouter.
+The main learning outcomes include:
 
-The `/triage` endpoint accepts a customer support message and returns:
+- Building REST APIs with FastAPI.
+- Managing data with PostgreSQL.
+- Running applications with Docker Compose.
+- Separating API, service, and repository layers.
+- Integrating an LLM through OpenRouter.
+- Validating and repairing AI-generated responses.
+- Handling temporary AI service failures.
+- Evaluating AI classification results.
+- Writing automated tests for AI-powered API behavior.
 
-- Category: billing, bug, feature, or other
-- Urgency: low, normal, or high
-- Confidence score
-- Short explanation
-
-### AI Evaluation Results
-
-Evaluation date: October 29, 2026
-
-Prompt version: triage_v1
-
-Model route: openrouter/free
-
-Total test cases: 8
-
-- Category accuracy: 100% (8/8)
-- Urgency accuracy: 75% (6/8)
-
-The AI correctly classified all eight message categories.
-
-However, it made two mistakes in urgency classification:
-
-- Case 2: Expected high urgency, but AI returned normal.
-- Case 8: Expected normal urgency, but AI returned low.
-
-These results show that category classification performed well on this small test set, but urgency classification needs improvement.
-
-To run the evaluation:
-
-python evals/run_evals.py
+The project combines traditional backend development with practical AI engineering techniques.
