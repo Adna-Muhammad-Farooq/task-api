@@ -1,0 +1,51 @@
+
+[
+  {
+    "id": 1,
+    "text": "I was charged twice for my subscription.",
+    "expected_category": "billing",
+    "expected_urgency": "normal"
+  },
+  {
+    "id": 2,
+    "text": "My payment failed, but money was deducted from my account.",
+    "expected_category": "billing",
+    "expected_urgency": "high"
+  },
+  {
+    "id": 3,
+    "text": "The application crashes every time I log in.",
+    "expected_category": "bug",
+    "expected_urgency": "high"
+  },
+  {
+    "id": 4,
+    "text": "The profile picture does not update after saving.",
+    "expected_category": "bug",
+    "expected_urgency": "normal"
+  },
+  {
+    "id": 5,
+    "text": "Please add a dark mode option to the application.",
+    "expected_category": "feature",
+    "expected_urgency": "low"
+  },
+  {
+    "id": 6,
+    "text": "It would be useful to export reports as PDF files.",
+    "expected_category": "feature",
+    "expected_urgency": "low"
+  },
+  {
+    "id": 7,
+    "text": "Hello, I just wanted to say thank you for your service.",
+    "expected_category": "other",
+    "expected_urgency": "low"
+  },
+  {
+    "id": 8,
+    "text": "I need some help, but I am not sure what the problem is.",
+    "expected_category": "other",
+    "expected_urgency": "normal"
+  }
+]

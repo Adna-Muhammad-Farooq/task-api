@@ -1,11 +1,40 @@
 
+from fastapi.exceptions import RequestValidationError
+from fastapi import Request
 from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
 from service import TaskService
+import json
+from fastapi import Request
+from fastapi.concurrency import run_in_threadpool
+from pydantic import ValidationError
+
+from triage_models import TriageRequest, TriageResult
+from triage_service import classify_message
+
 
 app = FastAPI(title="Task API", version="1.0")
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation(request: Request, exc: RequestValidationError):
+    if request.url.path != "/triage":
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.errors()},
+        )
+
+    errors = exc.errors()
+    location = errors[0].get("loc", ()) if errors else ()
+    field = next(
+        (str(part) for part in location if part not in ("body",)),
+        "body",
+    )
+
+    return JSONResponse(
+        status_code=400,
+        content={"error": f"Invalid field: {field}"},
+    )
 
 task_service = TaskService()
 
@@ -101,3 +130,32 @@ def delete_task(task_id: int):
         return error_response(f"Task {task_id} not found", 404)
 
     return Response(status_code=204)
+
+@app.post(
+    "/triage",
+    response_model=TriageResult,
+    summary="Classify a support message with AI",
+)
+async def triage(triage_request: TriageRequest):
+    try:
+        result = await run_in_threadpool(
+            classify_message,
+            triage_request.text,
+        )
+        return result
+
+    except (ValidationError, ValueError):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "AI output failed validation after one repair attempt"
+            },
+        )
+
+    except Exception:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "AI classification service failed"
+            },
+        )

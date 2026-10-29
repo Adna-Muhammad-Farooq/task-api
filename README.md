@@ -200,3 +200,41 @@ docker compose up -d
 - Commit `.env.example` with placeholder credentials only.
 - Use your own credentials when setting up a local copy of the project.
 - Never publish database passwords or other secrets in screenshots, logs, or source
+
+
+## AI Support Message Triage
+
+This project includes an AI-powered support message classification feature using FastAPI and OpenRouter.
+
+The `/triage` endpoint accepts a customer support message and returns:
+
+- Category: billing, bug, feature, or other
+- Urgency: low, normal, or high
+- Confidence score
+- Short explanation
+
+### AI Evaluation Results
+
+Evaluation date: October 29, 2026
+
+Prompt version: triage_v1
+
+Model route: openrouter/free
+
+Total test cases: 8
+
+- Category accuracy: 100% (8/8)
+- Urgency accuracy: 75% (6/8)
+
+The AI correctly classified all eight message categories.
+
+However, it made two mistakes in urgency classification:
+
+- Case 2: Expected high urgency, but AI returned normal.
+- Case 8: Expected normal urgency, but AI returned low.
+
+These results show that category classification performed well on this small test set, but urgency classification needs improvement.
+
+To run the evaluation:
+
+python evals/run_evals.py
